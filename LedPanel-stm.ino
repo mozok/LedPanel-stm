@@ -12,10 +12,11 @@ On start panel show only current time (mode 0) and wait for MQTT data
 
 Modes:  0 - default mode, show screen current time, 2 rows, screen odc.org.ua, tel. number 7-45-63
         1 - display "Doctor say" custom messege, static or dynemic, depends on string width
-        3 - display additional screen with custom message
-        10 - change brightness 0-255 (in practice 70-200)
-
-After arduinop get mode 1-3, it began to change screens сyclically/
+        2 - display additional screen with custom message
+        10 - change brightness 0-65535 (in practice 1000-10000)
+        11 - change animation scroll speed (higher number lower speed)
+        12 - do not show additional screen
+        13 - screen change time in ms (default 6000)
 
 Develop: Mozok Evgen
 
@@ -42,7 +43,7 @@ byte lastMode = mode;                          //last mode shown
 byte screen = 0;                               //current screen
 const char time1[] = {"Поточний час\0"};       //1st row for time screen
 char time2[] = {"00:00\0"};                    //current time from getTime
-const char screenSite[] = "www.YourSite.ua\0"; //screen with site url
+const char screenSite[] = "www.MySite.ua\0"; //screen with site url
 // char screenTel[] = "(05449)7-45-63";    //screen with tel number
 long timerScreenChange = 0; // timer for screen controll
 long timerScroll = 0;       //timer for scrolling string
@@ -50,7 +51,12 @@ long timerGetTime = 0;      //timer for getTime update
 char strToShow1[200];       //string to save custom msg
 char strToShow2[200];       //string to save custom msg
 bool flagScroll = false;    //scroll msg, if it`s too long
-uint16_t lngth;             //Length of custom msg
+bool flagAddScreen = false;
+bool flagScrollAdditionalScreen = false;
+uint8_t lastScreenNumber = 3;
+uint16_t lngth; //Length of custom msg
+uint8_t scrollSpeed = 40;
+uint16_t screenChangeTime = 6000;
 
 const byte tree[] = {0x00, 0x00, 0x00, 0x80, 0xe0, 0xb8, 0xf6, 0xfd, 0xee, 0xb8, 0xe0, 0x80, 0x00, 0x00, 0x00, 0x30, 0x78, 0xfe, 0xed, 0xff, 0xdf, 0xff, 0xfe, 0xf7, 0xbf, 0xfd, 0xff, 0xde, 0x78, 0x30};
 const byte snowMan[] = {0x40, 0x60, 0x80, 0x80, 0x00, 0x1c, 0x22, 0xc9, 0xcd, 0xc9, 0xc5, 0xc1, 0x22, 0x1c, 0x00, 0x80, 0x80, 0x60, 0x40, 0x00, 0x00, 0x00, 0x00, 0x1d, 0x22, 0x41, 0x80, 0x80, 0x80, 0x83, 0x80, 0x41, 0x22, 0x1d, 0x00, 0x00, 0x00, 0x00};
@@ -238,9 +244,9 @@ void loop()
         unsigned long currentMillis = millis();
 
         //change screen every ScreenChangeTime sec (6 s default)
-        if (mode == 0)
+        if (mode == 0 || mode == 2)
         {
-            if (currentMillis - timerScreenChange > 6000)
+            if (currentMillis - timerScreenChange > screenChangeTime)
             {
                 //Serial2.println("Screen gona change");   //DEBUG
 
@@ -248,10 +254,15 @@ void loop()
 
                 timerScreenChange = currentMillis;
             }
+            if (flagScroll && ((timerScroll + scrollSpeed) < currentMillis))
+            {
+                dmd.stepMarquee(-1, 0);
+                timerScroll = currentMillis;
+            }
         }
         else
         {
-            if (flagScroll && ((timerScroll + 50) < currentMillis))
+            if (flagScroll && ((timerScroll + scrollSpeed) < currentMillis))
             {
                 dmd.stepMarquee(-1, 0);
                 timerScroll = currentMillis;
@@ -282,13 +293,15 @@ void modeSwitch(char *dataRes)
     {
         //ESPGetTime();
         flagScroll = false;
+        flagAddScreen = false;
         screen = 0;
+        
         break;
     }
     case 1: //show msg
     {
         pch = strtok(NULL, "#");
-        screen = 3;
+        screen = 5;
         flagScroll = false;
 
         // strcpy(strToShow1, "");
@@ -308,7 +321,29 @@ void modeSwitch(char *dataRes)
         {
             flagScroll = true;
             // mode = 2;
-            screen = 4;
+            screen = 6;
+        }
+
+        screenControl();
+
+        break;
+    }
+    case 2: //show additional screen
+    {
+        flagScroll = false;
+        flagAddScreen = false;
+        pch = strtok(NULL, "#");
+        // flagAddScreen = true;
+        lastScreenNumber = 4;
+
+        strChange(pch, strToShow2);
+        dmd.selectFont(UkrRusArial_14);
+        lngth = dmd.stringWidth(strToShow2, strlen(strToShow2));
+        flagScrollAdditionalScreen = false;
+        if (lngth > 96)
+        {
+            // flagScroll = true;
+            flagScrollAdditionalScreen = true;
         }
 
         screenControl();
@@ -321,6 +356,34 @@ void modeSwitch(char *dataRes)
         uint16_t br = atoi(pch);
         dmd.setBrightness(br);
 
+        mode = lastMode;
+        break;
+    }
+    case 11:
+    {
+        pch = strtok(NULL, "#");
+        scrollSpeed = atoi(pch);
+
+        mode = lastMode;
+        break;
+    }
+    case 12:
+    {
+        lastScreenNumber = 3;
+        mode = lastMode;
+
+        break;
+    }
+    case 13:
+    {
+        pch = strtok(NULL, "#");
+        screenChangeTime = atoi(pch);
+        mode = lastMode;
+
+        break;
+    }
+    default:
+    {
         mode = lastMode;
     }
     }
@@ -347,7 +410,8 @@ void screenControl()
         flagScroll = false;
         dmd.clearScreen(true);
         dmd.selectFont(UkrRusArial_14);
-        dmd.drawString(0, 1, screenSite, strlen(screenSite), GRAPHICS_NORMAL);
+        
+        dmd.drawString(3, 1, screenSite, strlen(screenSite), GRAPHICS_NORMAL);
 
         break;
     }
@@ -365,6 +429,27 @@ void screenControl()
     }
     case 3:
     {
+        if (!flagScrollAdditionalScreen)
+        {
+            flagScroll = false;
+            dmd.selectFont(UkrRusArial_14);
+            dmd.clearScreen(true);
+            uint8_t xPos = ((DISPLAYS_ACROSS * DMD_PIXELS_ACROSS) - lngth) / 2;
+            dmd.drawString(xPos, 1, strToShow2, strlen(strToShow2), GRAPHICS_NORMAL);
+        }
+        else
+        {
+            dmd.selectFont(UkrRusArial_14);
+            dmd.clearScreen(true);
+            dmd.drawMarquee(strToShow2, strlen(strToShow2), (32 * DISPLAYS_ACROSS) - 1, 1);
+            timerScroll = millis();
+            flagScroll = true;
+        }
+
+        break;
+    }
+    case 5:
+    {
         flagScroll = false;
         dmd.selectFont(UkrRusArial_14);
         dmd.clearScreen(true);
@@ -373,7 +458,7 @@ void screenControl()
 
         break;
     }
-    case 4:
+    case 6:
     {
         dmd.selectFont(UkrRusArial_14);
         dmd.clearScreen(true);
@@ -385,10 +470,10 @@ void screenControl()
     }
     }
 
-    if (mode == 0)
+    if (mode == 0 || mode == 2)
     {
         screen++;
-        if (screen >= 3)
+        if (screen >= lastScreenNumber)
         {
             screen = 0;
         }
