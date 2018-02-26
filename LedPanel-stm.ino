@@ -37,19 +37,23 @@ SPIClass SPI_2(2);
 #define DISPLAYS_DOWN 1
 DMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN);
 
-byte mode = 0;                          //mode to show
-byte lastMode = mode;                   //last mode shown
-byte screen = 0;                        //current screen
-char time1[] = {"Поточний час\0"};      //1st row for time screen
-char time2[] = {"00:00\0"};             //current time from getTime
-char screenSite[] = "www.odc.org.ua\0"; //screen with site url
-char screenTel[] = "(05449)7-45-63";    //screen with tel number
-long timerScreenChange = 0;             // timer for screen controll
-long timerScroll = 0;                   //timer for scrolling string
-long timerGetTime = 0;                  //timer for getTime update
-char strDoctorSay[200];                 //string to save custom msg
-bool flagScroll = false;                //scroll msg, if it`s too long
-uint16_t lngth;                         //Length of custom msg
+byte mode = 0;                                 //mode to show
+byte lastMode = mode;                          //last mode shown
+byte screen = 0;                               //current screen
+const char time1[] = {"Поточний час\0"};       //1st row for time screen
+char time2[] = {"00:00\0"};                    //current time from getTime
+const char screenSite[] = "www.YourSite.ua\0"; //screen with site url
+// char screenTel[] = "(05449)7-45-63";    //screen with tel number
+long timerScreenChange = 0; // timer for screen controll
+long timerScroll = 0;       //timer for scrolling string
+long timerGetTime = 0;      //timer for getTime update
+char strToShow1[200];       //string to save custom msg
+char strToShow2[200];       //string to save custom msg
+bool flagScroll = false;    //scroll msg, if it`s too long
+uint16_t lngth;             //Length of custom msg
+
+const byte tree[] = {0x00, 0x00, 0x00, 0x80, 0xe0, 0xb8, 0xf6, 0xfd, 0xee, 0xb8, 0xe0, 0x80, 0x00, 0x00, 0x00, 0x30, 0x78, 0xfe, 0xed, 0xff, 0xdf, 0xff, 0xfe, 0xf7, 0xbf, 0xfd, 0xff, 0xde, 0x78, 0x30};
+const byte snowMan[] = {0x40, 0x60, 0x80, 0x80, 0x00, 0x1c, 0x22, 0xc9, 0xcd, 0xc9, 0xc5, 0xc1, 0x22, 0x1c, 0x00, 0x80, 0x80, 0x60, 0x40, 0x00, 0x00, 0x00, 0x00, 0x1d, 0x22, 0x41, 0x80, 0x80, 0x80, 0x83, 0x80, 0x41, 0x22, 0x1d, 0x00, 0x00, 0x00, 0x00};
 
 /*--------------------------------------------------------------------------------------
   Interrupt handler for Timer1 (TimerOne) driven DMD refresh scanning, this gets
@@ -63,7 +67,7 @@ void ScanDMD()
 #pragma region ESPinit
 // Initialize a connection to esp-link using the normal hardware Serial2 port both for
 // SLIP and for debug messages.
-ELClient esp(&Serial2,&Serial2);
+ELClient esp(&Serial2, &Serial2);
 
 // Initialize CMD client (for GetTime)
 ELClientCmd cmd(&esp);
@@ -176,6 +180,7 @@ void setup()
     SPI_2.setClockDivider(SPI_CLOCK_DIV64); // Use a different speed to SPI 1
     pinMode(SPI2_NSS_PIN, OUTPUT);
 
+    dmd.clearScreen(true); //true is normal (all pixels off), false is negative (all pixels on)
     // Sync-up with esp-link, this is required at the start of any sketch and initializes the
     // callbacks to the wifi status change callback. The callback gets called with the initial
     // status right after Sync() below completes.
@@ -214,8 +219,8 @@ void loop()
 
         //  Led Panel setup
         Timer3.setMode(TIMER_CH1, TIMER_OUTPUTCOMPARE);
-        Timer3.setPeriod(3000); // in microseconds
-        Timer3.setCompare(TIMER_CH1, 1);  // overflow might be small
+        Timer3.setPeriod(3000);          // in microseconds
+        Timer3.setCompare(TIMER_CH1, 1); // overflow might be small
         Timer3.attachInterrupt(TIMER_CH1, ScanDMD);
 
         //clear/init the DMD pixels held in RAM
@@ -232,41 +237,6 @@ void loop()
     {
         unsigned long currentMillis = millis();
 
-        // if (mode == 0)
-        // {
-        //     //get time from SNTP every 1 min
-        //     if (currentMillis - timerGetTime > 60000)
-        //     {
-        //         // br += 25;                     //DEBUG
-        //         // Serial2.print("Brightness: "); //DEBUG
-        //         // Serial2.println(br);           //DEBUG
-        //         // if (br > 225)                 //DEBUG
-        //         //     br = 50;                  //DEBUG
-        //         // dmd.setBrightness(br);        //DEBUG
-
-        //         ESPGetTime();
-        //         timerGetTime = currentMillis;
-        //         //timeUpdate = 60000;
-        //     }
-        // }
-        // else
-        // {
-        //     //change screen every ScreenChangeTime sec (6 s default)
-        //     if (currentMillis - timerScreenChange > 6000)
-        //     {
-        //         //Serial2.println("Screen gona change");   //DEBUG
-
-        //         screenControl();
-
-        //         timerScreenChange = currentMillis;
-        //     }
-
-        //     if (flagScroll && ((timerScroll + 30) < currentMillis))
-        //     {
-        //         dmd.stepMarquee(-1, 0);
-        //         timerScroll = currentMillis;
-        //     }
-        // }
         //change screen every ScreenChangeTime sec (6 s default)
         if (mode == 0)
         {
@@ -321,19 +291,19 @@ void modeSwitch(char *dataRes)
         screen = 3;
         flagScroll = false;
 
-        // strcpy(strDoctorSay, "");
+        // strcpy(strToShow1, "");
 
-        strChange(pch, strDoctorSay);
+        strChange(pch, strToShow1);
 
         // Serial2.println("modeSwitch");
         // Serial2.print("Data: ");
-        // Serial2.println(strDoctorSay);
+        // Serial2.println(strToShow1);
         // Serial2.print("Length: ");
-        // Serial2.println(strlen(strDoctorSay));
+        // Serial2.println(strlen(strToShow1));
         // dmd.selectFont(UkrRusArial_14);
-        // Serial2.println(dmd.stringWidth(strDoctorSay, strlen(strDoctorSay)));
+        // Serial2.println(dmd.stringWidth(strToShow1, strlen(strToShow1)));
         dmd.selectFont(UkrRusArial_14);
-        lngth = dmd.stringWidth(strDoctorSay, strlen(strDoctorSay));
+        lngth = dmd.stringWidth(strToShow1, strlen(strToShow1));
         if (lngth > 96)
         {
             flagScroll = true;
@@ -345,7 +315,7 @@ void modeSwitch(char *dataRes)
 
         break;
     }
-    case 3: //brightness
+    case 10: //brightness
     {
         pch = strtok(NULL, "#");
         uint16_t br = atoi(pch);
@@ -361,51 +331,6 @@ void modeSwitch(char *dataRes)
 //Controlling what screens to show
 void screenControl()
 {
-    // switch (screen)
-    // {
-    // case 0: //time
-    // {
-    //     flagScroll = false;
-    //     ESPGetTime();
-
-    //     screen = mode;
-
-    //     break;
-    // }
-    // case 1: //doctor say
-    // {
-    //     flagScroll = false;
-    //     dmd.selectFont(UkrRusArial_14);
-    //     dmd.clearScreen(true);
-    //     // Serial2.println("screenControl");
-    //     // Serial2.print("Data: ");
-    //     // Serial2.println(strDoctorSay);
-    //     // Serial2.print("Length: ");
-    //     // Serial2.println(strlen(strDoctorSay));
-    //     // Serial2.println(dmd.stringWidth(strDoctorSay, strlen(strDoctorSay)));
-    //     dmd.drawString(0, 1, strDoctorSay, /*sizeof(strDoctorSay) / sizeof(*strDoctorSay)*/ strlen(strDoctorSay), GRAPHICS_NORMAL);
-
-    //     screen = 0;
-
-    //     break;
-    // }
-    // case 2:
-    // {
-    //     dmd.selectFont(UkrRusArial_14);
-    //     dmd.drawMarquee(strDoctorSay, strlen(strDoctorSay), (32 * DISPLAYS_ACROSS) - 1, 0);
-    //     timerScroll = millis();
-    //     flagScroll = true;
-
-    //     screen = 0;
-
-    //     break;
-    // }
-    // }
-
-    // screen++;
-    // if (screen > 1)
-    //     screen = 0;
-
     switch (screen)
     {
     case 0:
@@ -422,7 +347,7 @@ void screenControl()
         flagScroll = false;
         dmd.clearScreen(true);
         dmd.selectFont(UkrRusArial_14);
-        dmd.drawString(4, 1, screenSite, strlen(screenSite), GRAPHICS_NORMAL);
+        dmd.drawString(0, 1, screenSite, strlen(screenSite), GRAPHICS_NORMAL);
 
         break;
     }
@@ -431,7 +356,10 @@ void screenControl()
         flagScroll = false;
         dmd.clearScreen(true);
         dmd.selectFont(UkrRusArial_14);
-        dmd.drawString(3, 1, screenTel, strlen(screenTel), GRAPHICS_NORMAL);
+
+        dmd.drawImg(1, 0, tree, sizeof(tree) / 2);
+        dmd.drawImg(40, 0, snowMan, sizeof(snowMan) / 2);
+        dmd.drawImg(79, 0, tree, sizeof(tree) / 2);
 
         break;
     }
@@ -441,7 +369,7 @@ void screenControl()
         dmd.selectFont(UkrRusArial_14);
         dmd.clearScreen(true);
         uint8_t xPos = ((DISPLAYS_ACROSS * DMD_PIXELS_ACROSS) - lngth) / 2;
-        dmd.drawString(xPos, 1, strDoctorSay, strlen(strDoctorSay), GRAPHICS_NORMAL);
+        dmd.drawString(xPos, 1, strToShow1, strlen(strToShow1), GRAPHICS_NORMAL);
 
         break;
     }
@@ -449,7 +377,7 @@ void screenControl()
     {
         dmd.selectFont(UkrRusArial_14);
         dmd.clearScreen(true);
-        dmd.drawMarquee(strDoctorSay, strlen(strDoctorSay), (32 * DISPLAYS_ACROSS) - 1, 1);
+        dmd.drawMarquee(strToShow1, strlen(strToShow1), (32 * DISPLAYS_ACROSS) - 1, 1);
         timerScroll = millis();
         flagScroll = true;
 
