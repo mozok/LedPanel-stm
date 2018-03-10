@@ -105,7 +105,7 @@ void wifiCb(void *response)
 
 bool connected;
 
-char panel[] = {"/STMpanel1/command\0"}; //topic to subscribe, chage in setup() according to devID
+char panel[] = "/STMpanel1/command\0"; //topic to subscribe, chage in setup() according to devID
 
 // Callback when MQTT is connected
 void mqttConnected(void *response)
@@ -401,7 +401,7 @@ void screenControl()
         flagScroll = false;
         ESPGetTime();
 
-        screen = mode;
+        // screen = mode;
 
         break;
     }
